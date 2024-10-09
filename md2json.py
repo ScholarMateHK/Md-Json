@@ -10,6 +10,12 @@ def read_md_file(file_path):
         return file.read()
 
 
+def read_json_file(file_path):
+    """读取 JSON 文件内容"""
+    with open(file_path, "r", encoding="utf-8") as file:
+        return json.load(file)
+
+
 def split_text_into_chunks_by_chapter(md_text):
     """按章节（基于 # 标题）拆分 Markdown 文件"""
     chunks = re.split(r"(?=^#{1,2} )", md_text, flags=re.MULTILINE)
@@ -23,42 +29,38 @@ def remove_special_characters(output):
     return output
 
 
-def process_md_chunks(md_text, client, previous_hierarchy, max_chars=3000):
-    """处理拆分后的 chunk，并确保每个 chunk 的字符数不超过 max_chars，保持层次一致性"""
+def process_md_chunks(md_text, client, reference_structure, max_chars=3000):
     chunks = split_text_into_chunks_by_chapter(md_text)
-    paper_structure = {
-        "paper": {
-            "title": "",  # 初始化标题
-            "authors": [],  # 初始化作者
-            "abstract": "",  # 初始化摘要
-            "index_terms": [],  # 初始化关键词
-            "sections": [],  # 初始化章节
-            "references": [],  # 初始化参考文献
-        }
-    }
-
     chunk_all = ""
+    paper_metadata = {}
+    previous_hierarchy = [] 
 
-    for i, chunk in enumerate(chunks):
+    """处理拆分后的 chunk，并确保每个 chunk 的字符数不超过 max_chars，保持层次一致性"""
+    for chunk in chunks:
         if len(chunk_all) + len(chunk) > max_chars:
-            chunk_result = process_single_chunk(chunk_all, client, previous_hierarchy)
-            update_paper_structure(chunk_result, paper_structure)
-            chunk_all = chunk  # 重置 chunk_all
+            chunk_result = process_single_chunk(chunk_all, client, reference_structure, previous_hierarchy)
+            previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
+            paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
+            chunk_all = chunk
         else:
-            chunk_all += chunk
+            chunk_all += "\n" + chunk
 
     if chunk_all:
-        chunk_result = process_single_chunk(chunk_all, client, previous_hierarchy)
-        update_paper_structure(chunk_result, paper_structure)
+        chunk_result = process_single_chunk(chunk_all, client, reference_structure, previous_hierarchy)
+        previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
+        paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
 
-    return paper_structure
+    return paper_metadata, previous_hierarchy
 
 
-def process_single_chunk(chunk, client, previous_hierarchy):
+def process_single_chunk(chunk, client, reference_structure, previous_hierarchy):
     """处理单个 chunk 并调用 OpenAI 生成 JSON 数据"""
-    text = f"""【Task Description】: Transform the OCR-scanned text of an academic paper into a structured JSON file. The text may include errors, formatting issues, and random encodings from images. Remove corrupted or unreadable text (i.e., non-ASCII characters or sequences that do not resemble meaningful words or sentences, including all mathematical formulas and tables).
+    text = f"""【Task Description】: Transform the OCR-scanned text chunk of an academic paper into a structured JSON file. The text may include errors, formatting issues, and random encodings from images. Remove corrupted or unreadable text (i.e., non-ASCII characters or sequences that do not resemble meaningful words or sentences, including all mathematical formulas and tables).
     【Objective】: Create a JSON document that preserves all original text from the OCR-scanned paper, excluding any images, formulas, tables, or corrupted characters, while retaining paragraph segmentation and the hierarchical structure of sections and subsections. 
-    For **each individual element** (e.g., heading, paragraph, or list item), classify it as one of the following categories: 'title', 'authors', 'abstract', 'keywords', 'sections', or 'references'. **For sections, indicate whether it is a heading, subheading, or paragraph**.
+    For **each individual element** (e.g., heading, paragraph, or list item), classify it as one of the following categories: 'title', 'authors', 'abstract', 'keywords', 'sections', or 'references'. **For sections, indicate whether it is a heading, subheading, or paragraph**. Here is the reference structure:
+    {reference_structure} 
+    You should follow the previous chunks' hierarchy to classify each element:
+    {previous_hierarchy}
 
     【Steps to Follow】:
     1. **Text Cleaning**: Remove corrupted characters, non-ASCII symbols, artifacts from images, formulas, and tables, without altering valid textual content.
@@ -71,7 +73,7 @@ def process_single_chunk(chunk, client, previous_hierarchy):
 
     【Important】:
     - Only return valid JSON data for **each individual element**. Do not include any additional explanations or comments in the response.
-    - Ensure the JSON structure is valid and properly formatted. Ensure the new JSON structure follows the same logical order as the original text.
+    - Ensure the JSON structure is valid and properly formatted. Ensure the new JSON structure follows the same logical order as the previous chunks.
 
     **Classify each element in the following text into the correct category and return each element's classification in JSON format**:
     【Raw OCR-scanned text】:{chunk}"""
@@ -93,32 +95,22 @@ def process_single_chunk(chunk, client, previous_hierarchy):
 
     return chunk_json
 
-
+# need to do
 def update_paper_structure(chunk_result, paper_structure):
     """更新生成的 paper 结构"""
     if not chunk_result:
+        return paper_structure
+
+    
+    return paper_structure
+
+# need to do
+def update_paper_metadata(chunk_result, paper_metadata):
+    """更新生成的 paper 元数据"""
+    if not chunk_result:
         return
 
-    for element in chunk_result:
-        if element["type"] == "title":
-            paper_structure["paper"]["title"] = element["content"]
-        elif element["type"] == "authors":
-            paper_structure["paper"]["authors"].extend(element["content"])
-        elif element["type"] == "abstract":
-            paper_structure["paper"]["abstract"] = element["content"]
-        elif element["type"] == "keywords":
-            paper_structure["paper"]["index_terms"].extend(element["content"])
-        elif element["type"] == "sections":
-            paper_structure["paper"]["sections"].append(
-                {
-                    "type": element.get("section_type", "paragraph"),
-                    "content": element["content"],
-                }
-            )
-        elif element["type"] == "references":
-            paper_structure["paper"]["references"].append(
-                {"reference": element["content"]}
-            )
+    return paper_metadata
 
 
 def save_json_to_file(json_data, output_file):
@@ -128,8 +120,9 @@ def save_json_to_file(json_data, output_file):
 
 
 if __name__ == "__main__":
-    file_path = "227364298/227364298.md"
+    file_path = "227364298.md"
     output_file = "227364298.json"
+    reference_structure = read_json_file("structure.json")
     md_text = read_md_file(file_path)
 
     client = OpenAI(
@@ -137,13 +130,10 @@ if __name__ == "__main__":
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
 
-    # 传递之前生成的层次结构作为参数
-    previous_hierarchy = []
-
     # 处理 MD 文件并生成 JSON 数据，确保每个 chunk 不超过 3000 字符
-    paper_structure = process_md_chunks(md_text, client, previous_hierarchy)
+    paper_metadata, _ = process_md_chunks(md_text, client, reference_structure, max_chars=3000)
 
     # 保存生成的 JSON 数据
-    save_json_to_file(paper_structure, output_file)
+    save_json_to_file(paper_metadata, output_file)
 
     print(f"JSON 文件已保存至 {output_file}")

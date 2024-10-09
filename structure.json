@@ -1,0 +1,45 @@
+{
+	"paper": {
+		"title": "A Machine Learning and Large Language Model-Integrated Approach to Research Project Evaluation",
+		"authors": [
+
+		],
+		"abstract": "",
+		"index_terms": [
+
+		],
+		"sections": [
+			{
+				"heading": "Introduction",
+				"subsections": [
+					{
+						"subheading": "subheading name",
+						"content": [
+							{
+								"type": "paragraph",
+								"content": "paragraph content"
+							},
+							{
+								"type": "paragraph",
+								"content": "paragraph content"
+							}
+						]
+					}
+				]
+			},
+			{
+				"heading": "references",
+				"content": [
+					{
+						"type": "paragraph",
+						"content": "paper reference content"
+					},
+					{
+						"type": "paragraph",
+						"content": "paper reference content"
+					}
+				]
+			}
+		]
+	}
+}
