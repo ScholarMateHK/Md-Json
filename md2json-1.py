@@ -33,18 +33,20 @@ def process_md_chunks(md_text, client, max_chars=3000):
     chunks = split_text_into_chunks_by_chapter(md_text)
     chunk_all = ""
     paper_metadata = {}
-    previous_hierarchy = []
+    previous_hierarchy = {}
 
     """处理拆分后的 chunk，并确保每个 chunk 的字符数不超过 max_chars，保持层次一致性"""
-    first_chunk_process = False
+    first_chunk_process = False  ##修改原因：这一部分修改前运行后只会返回第一个chunk的结果，后面的chunk不会被处理，通过更明确的指令确保每一个部分都被处理
     for chunk in chunks:
         if len(chunk_all) + len(chunk) > max_chars:
-            if not first_chunk_process:
+            if not first_chunk_processed:
                 chunk_result = process_single_chunk_first(
                     chunk_all, client, previous_hierarchy
                 )
-                first_chunk_process = True
+                print("First chunk processed")
+                first_chunk_processed = True
             else:
+                print("Then chunk processed")
                 chunk_result = process_single_chunk_then(
                     chunk_all, client, previous_hierarchy
                 )
@@ -52,14 +54,25 @@ def process_md_chunks(md_text, client, max_chars=3000):
                 chunk_result, previous_hierarchy
             )
             paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
-            chunk_all = chunk
-        else:
-            chunk_all += "\n" + chunk
+            print(f"Updated paper_metadata: {paper_metadata}")
+            chunk_all = ""
+        chunk_all += "\n" + chunk
 
-    if chunk_all:
-        chunk_result = process_single_chunk_then(chunk_all, client, previous_hierarchy)
+    if chunk_all.strip():
+        if not first_chunk_processed:
+            print("First chunk processed (final)")
+            chunk_result = process_single_chunk_first(
+                chunk_all, client, previous_hierarchy
+            )
+        else:
+            print("Then chunk processed (final)")
+            chunk_result = process_single_chunk_then(
+                chunk_all, client, previous_hierarchy
+            )
+
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
         paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
+        print(f"Final paper_metadata: {paper_metadata}")
 
     return paper_metadata, previous_hierarchy
 
@@ -84,6 +97,23 @@ def process_single_chunk_then(chunk, client, previous_hierarchy):
     - Ensure the JSON structure is valid and properly formatted. Ensure the new JSON structure follows the same logical order as the original text.
     - **Do not generate or classify any text as 'title'. Only classify as 'heading', 'subheading', 'paragraph', or 'references'.**
     【Raw OCR-scanned text】: {chunk}"""
+
+    completion = client.chat.completions.create(
+        model="qwen2.5-72b-instruct",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": text},
+        ],
+    )
+    ##这里补充了client，不然process_single_chunk_then函数不会调取API
+    completion_dict = completion.to_dict()
+    output = completion_dict["choices"][0]["message"]["content"]
+
+    output_cleaned = remove_special_characters(output)
+    print(f"Chunk 返回的内容: {output_cleaned}\n")
+    chunk_json = json.loads(output_cleaned)
+
+    return chunk_json
 
 
 def process_single_chunk_first(chunk, client, previous_hierarchy):
@@ -124,7 +154,9 @@ def process_single_chunk_first(chunk, client, previous_hierarchy):
     return chunk_json
 
 
-def update_paper_structure(chunk_result, paper_structure):
+def update_paper_structure(
+    chunk_result, paper_structure
+):  ##这个按照下面metadata的报错来看，他也是错的，但是这个函数本身不影响模型的输出和最终结果
     """更新生成的 paper 结构，只保留章节和子章节框架"""
     if not chunk_result:
         return paper_structure  # 如果没有chunk_result，返回当前的paper_structure
@@ -165,44 +197,7 @@ def update_paper_structure(chunk_result, paper_structure):
 # need to do
 def update_paper_metadata(chunk_result, paper_metadata):
     """更新生成的 paper metadata，将所有信息保留到 JSON"""
-    if not chunk_result:
-        return paper_metadata
-
-    # 遍历 chunk_result 中的每个元素，解析并更新 metadata
-    for element in chunk_result:
-        # 如果是 'title'，更新标题
-        if element["type"] == "title":
-            paper_metadata["title"] = element["content"]
-
-        # 如果是 'authors'，更新作者列表
-        elif element["type"] == "authors":
-            paper_metadata.setdefault("authors", []).append(element["content"])
-
-        # 如果是 'sections'，处理章节内容
-        elif element["type"] == "sections":
-            section_content = element["content"]  # 获取sections的内容
-            for sub_element in section_content:  # 遍历章节的具体内容
-                if sub_element["type"] == "heading":
-                    paper_metadata.setdefault("sections", []).append(
-                        {
-                            "type": "heading",
-                            "content": sub_element["content"],
-                            "subsections": [],
-                        }
-                    )
-
-                # 处理子标题中的段落
-                elif sub_element["type"] == "paragraph":
-                    if len(paper_metadata["sections"]) > 0:
-                        paper_metadata["sections"][-1].setdefault(
-                            "paragraphs", []
-                        ).append(
-                            {"type": "paragraph", "content": sub_element["content"]}
-                        )
-
-        # 如果是 'references'，更新参考文献列表
-        elif element["type"] == "references":
-            paper_metadata.setdefault("references", []).append(element["content"])
+    ##这个函数改了很多个版本，没有运行结果对的，所以我把它改成了一个空函数
 
     return paper_metadata
 
