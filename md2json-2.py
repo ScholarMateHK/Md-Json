@@ -32,19 +32,21 @@ def remove_special_characters(output):
 def process_md_chunks(md_text, client, max_chars=3000):
     chunks = split_text_into_chunks_by_chapter(md_text)
     chunk_all = ""
-    paper_metadata = {}
-    previous_hierarchy = []
+    paper_metadata = {"sections": []}
+    previous_hierarchy = {}
 
-    """处理拆分后的 chunk，并确保每个 chunk 的字符数不超过 max_chars，保持层次一致性"""
-    first_chunk_process = False
+    first_chunk_processed = False
+
     for chunk in chunks:
         if len(chunk_all) + len(chunk) > max_chars:
-            if not first_chunk_process:
+            if not first_chunk_processed:
                 chunk_result = process_single_chunk_first(
                     chunk_all, client, previous_hierarchy
                 )
-                first_chunk_process = True
+                print("First chunk processed")
+                first_chunk_processed = True
             else:
+                print("Then chunk processed")
                 chunk_result = process_single_chunk_then(
                     chunk_all, client, previous_hierarchy
                 )
@@ -52,12 +54,27 @@ def process_md_chunks(md_text, client, max_chars=3000):
                 chunk_result, previous_hierarchy
             )
             paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
-            chunk_all = chunk
-        else:
-            chunk_all += "\n" + chunk
+            print(
+                f"Paper_metadata after processing this chunk: {json.dumps(paper_metadata, indent=2, ensure_ascii=False)}"
+            )
+            chunk_all = ""
+        chunk_all += "\n" + chunk
 
-    if chunk_all:
-        chunk_result = process_single_chunk_then(chunk_all, client, previous_hierarchy)
+    if chunk_all.strip():
+        if not first_chunk_processed:
+            print("First chunk processed (final)")
+            chunk_result = process_single_chunk_first(
+                chunk_all, client, previous_hierarchy
+            )
+        else:
+            print("Then chunk processed (final)")
+            chunk_result = process_single_chunk_then(
+                chunk_all, client, previous_hierarchy
+            )
+            print(
+                f"Paper_metadata final processing this chunk: {json.dumps(paper_metadata, indent=2, ensure_ascii=False)}"
+            )
+
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
         paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
 
@@ -84,6 +101,23 @@ def process_single_chunk_then(chunk, client, previous_hierarchy):
     - Ensure the JSON structure is valid and properly formatted. Ensure the new JSON structure follows the same logical order as the original text.
     - **Do not generate or classify any text as 'title'. Only classify as 'heading', 'subheading', 'paragraph', or 'references'.**
     【Raw OCR-scanned text】: {chunk}"""
+
+    completion = client.chat.completions.create(
+        model="qwen2.5-72b-instruct",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": text},
+        ],
+    )
+
+    completion_dict = completion.to_dict()
+    output = completion_dict["choices"][0]["message"]["content"]
+
+    output_cleaned = remove_special_characters(output)
+    print(f"Chunk 返回的内容: {output_cleaned}\n")
+    chunk_json = json.loads(output_cleaned)
+
+    return chunk_json
 
 
 def process_single_chunk_first(chunk, client, previous_hierarchy):
@@ -124,66 +158,32 @@ def process_single_chunk_first(chunk, client, previous_hierarchy):
     return chunk_json
 
 
+def ensure_chunk_result_is_list(chunk_result):
+    """
+    确保 chunk_result 是一个包含字典的列表。如果 chunk_result 是字典，则将其转化为列表。
+    """
+    if isinstance(chunk_result, dict):
+        return [chunk_result]
+    elif isinstance(chunk_result, list):
+        return chunk_result
+    else:
+        print(
+            f"Unexpected chunk_result type: {type(chunk_result)}. Returning an empty list."
+        )
+        return []
+
+
 def update_paper_structure(chunk_result, paper_structure):
     """更新生成的 paper 结构，只保留章节和子章节框架"""
-    if not chunk_result:
-        return paper_structure  # 如果没有chunk_result，返回当前的paper_structure
+    if not isinstance(chunk_result, list):
+        chunk_result = [chunk_result]
 
-    # 遍历 chunk_result 中的每个元素，解析并更新结构
     for element in chunk_result:
-        # 如果是 'title'，更新标题字段
-        if element["type"] == "title":
-            paper_structure["title"] = element["content"]
-
-        # 如果是 'authors'，更新作者列表
-        elif element["type"] == "authors":
-            paper_structure.setdefault("authors", []).append(element["content"])
-
-        # 如果是 'sections'，处理章节内容
-        elif element["type"] == "sections":
-            section_content = element["content"]  # 获取sections的内容
-            for sub_element in section_content:  # 遍历章节的具体内容
+        if "sections" in element:
+            section_content = element["sections"]
+            for sub_element in section_content:
                 if sub_element["type"] == "heading":
                     paper_structure.setdefault("sections", []).append(
-                        {
-                            "type": "heading",
-                            "content": sub_element["content"],
-                            "subsections": [],  # 初始化子部分
-                        }
-                    )
-
-                # 如果需要处理子标题，不包含段落
-                elif sub_element["type"] == "subheading":
-                    if len(paper_structure["sections"]) > 0:
-                        paper_structure["sections"][-1]["subsections"].append(
-                            {"type": "subheading", "content": sub_element["content"]}
-                        )
-
-    return paper_structure
-
-
-# need to do
-def update_paper_metadata(chunk_result, paper_metadata):
-    """更新生成的 paper metadata，将所有信息保留到 JSON"""
-    if not chunk_result:
-        return paper_metadata
-
-    # 遍历 chunk_result 中的每个元素，解析并更新 metadata
-    for element in chunk_result:
-        # 如果是 'title'，更新标题
-        if element["type"] == "title":
-            paper_metadata["title"] = element["content"]
-
-        # 如果是 'authors'，更新作者列表
-        elif element["type"] == "authors":
-            paper_metadata.setdefault("authors", []).append(element["content"])
-
-        # 如果是 'sections'，处理章节内容
-        elif element["type"] == "sections":
-            section_content = element["content"]  # 获取sections的内容
-            for sub_element in section_content:  # 遍历章节的具体内容
-                if sub_element["type"] == "heading":
-                    paper_metadata.setdefault("sections", []).append(
                         {
                             "type": "heading",
                             "content": sub_element["content"],
@@ -191,18 +191,71 @@ def update_paper_metadata(chunk_result, paper_metadata):
                         }
                     )
 
-                # 处理子标题中的段落
-                elif sub_element["type"] == "paragraph":
-                    if len(paper_metadata["sections"]) > 0:
-                        paper_metadata["sections"][-1].setdefault(
-                            "paragraphs", []
+                elif sub_element["type"] == "subheading":
+                    if len(paper_structure["sections"]) > 0:
+                        paper_structure["sections"][-1].setdefault(
+                            "subsections", []
                         ).append(
+                            {"type": "subheading", "content": sub_element["content"]}
+                        )
+    return paper_structure
+
+
+def update_paper_metadata(chunk_result, paper_metadata):
+    """更新生成的 paper metadata，将所有信息保留到 JSON"""
+    if not isinstance(chunk_result, list):
+        chunk_result = [chunk_result]
+        print(f"Chunk result: {chunk_result}")  # 打印 chunk_result，查看数据格式
+
+    for element in chunk_result:
+        # 处理 sections 键
+        if "sections" in element:
+            section_content = element["sections"]
+            for sub_element in section_content:
+                if sub_element["type"] == "heading":
+                    # 如果没有同样的 heading，追加新的 heading
+                    paper_metadata.setdefault("sections", []).append(
+                        {
+                            "type": "heading",
+                            "content": sub_element["content"],
+                            "subsections": [],
+                            "paragraphs": [],
+                        }
+                    )
+
+                elif sub_element["type"] == "paragraph":
+                    # 段落应当追加到最后一个 heading
+                    if len(paper_metadata["sections"]) > 0:
+                        paper_metadata["sections"][-1]["paragraphs"].append(
                             {"type": "paragraph", "content": sub_element["content"]}
                         )
 
-        # 如果是 'references'，更新参考文献列表
-        elif element["type"] == "references":
-            paper_metadata.setdefault("references", []).append(element["content"])
+                elif sub_element["type"] == "subheading":
+                    # 子标题应当追加到最后一个 heading
+                    if len(paper_metadata["sections"]) > 0:
+                        paper_metadata["sections"][-1]["subsections"].append(
+                            {
+                                "type": "subheading",
+                                "content": sub_element["content"],
+                                "paragraphs": [],
+                            }
+                        )
+
+        # 处理 title
+        elif "title" in element:
+            if "title" not in paper_metadata:
+                paper_metadata["title"] = element["content"]  # 避免重复追加
+
+        # 处理 authors
+        elif "authors" in element:
+            if "authors" not in paper_metadata:
+                paper_metadata["authors"] = element["content"]  # 避免重复追加
+
+        # 处理 references
+        elif "references" in element:
+            paper_metadata.setdefault("references", []).append(
+                {"type": "paragraph", "content": element["content"]}
+            )
 
     return paper_metadata
 
@@ -214,7 +267,7 @@ def save_json_to_file(paper_metadata, output_file):
 
 
 if __name__ == "__main__":
-    file_path = "227364298.md"
+    file_path = "227364298/227364298.md"
     output_file = "227364298.json"
     md_text = read_md_file(file_path)
 
@@ -223,10 +276,8 @@ if __name__ == "__main__":
         base_url="https://dashscope.aliyuncs.com/compatible-mode/v1",
     )
 
-    # 处理 MD 文件并生成 JSON 数据，确保每个 chunk 不超过 3000 字符
     paper_metadata, _ = process_md_chunks(md_text, client, max_chars=3000)
 
-    # 保存生成的 JSON 数据
     save_json_to_file(paper_metadata, output_file)
 
     print(f"JSON 文件已保存至 {output_file}")
