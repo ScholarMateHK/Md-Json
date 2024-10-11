@@ -39,7 +39,8 @@ def count_token_len(string):
         # 如果不包含中文，通过空格分割字符串
         # 并返回分割后的单词数量作为 token 数
         return len(string.split())
-    
+
+
 def get_segmented_chunks(chunks):
     """根据章节拆分后的chunks，进一步拆分出first, then, final的chunks"""
     first_chunk = ""
@@ -49,13 +50,13 @@ def get_segmented_chunks(chunks):
     # 先处理first_chunk
     while chunks and count_token_len(first_chunk + chunks[0]) <= 3000:
         first_chunk += chunks.pop(0)
-    
+
     # 再处理final_chunk
     if len(chunks) >= 2:
         final_chunk = chunks.pop() + chunks.pop()
     elif len(chunks) == 1:
         final_chunk = chunks.pop()
-    
+
     # 最后处理then_chunks
     current_chunk = ""
     for chunk in chunks:
@@ -67,8 +68,9 @@ def get_segmented_chunks(chunks):
             current_chunk = chunk
     if current_chunk:
         then_chunks.append(current_chunk)
-    
+
     return first_chunk, then_chunks, final_chunk
+
 
 def process_md_chunks(md_text, client, max_token=3000):
     chunks = split_text_into_chunks_by_chapter(md_text)
@@ -95,13 +97,16 @@ def process_md_chunks(md_text, client, max_token=3000):
 
     # 处理 final_chunk
     if final_chunk:
-        chunk_result = process_single_chunk_final(final_chunk, client, previous_hierarchy)
+        chunk_result = process_single_chunk_final(
+            final_chunk, client, previous_hierarchy
+        )
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
         paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
         print("Final chunk processed")
         print(f"Final paper_metadata: {paper_metadata}")
 
     return paper_metadata, previous_hierarchy
+
 
 def process_single_chunk_first(chunk, client):
     """处理单个 chunk 并调用 OpenAI 生成 JSON 数据"""
@@ -140,6 +145,7 @@ def process_single_chunk_first(chunk, client):
 
     return chunk_json
 
+
 def process_single_chunk_then(chunk, client, previous_hierarchy):
     system_prompt = f"""【Task Description】: Transform the OCR-scanned text of an academic paper into a structured JSON file. The text may include errors, formatting issues, and random encodings from images. Remove corrupted or unreadable text (i.e., non-ASCII characters or sequences that do not resemble meaningful words or sentences, including all mathematical formulas and tables).
     【Objective】: Create a JSON document that preserves all original text from the OCR-scanned paper, excluding any images, formulas, tables, or corrupted characters, while retaining paragraph segmentation and the hierarchical structure of sections and subsections. 
@@ -177,26 +183,25 @@ def process_single_chunk_then(chunk, client, previous_hierarchy):
 
     return chunk_json
 
+
 # todo
 def process_single_chunk_final(chunk, client, previous_hierarchy):
-    system_prompt = f"""【Task Description】: Transform the OCR-scanned text of an academic paper into a structured JSON file. The text may include errors, formatting issues, and random encodings from images. Remove corrupted or unreadable text (i.e., non-ASCII characters or sequences that do not resemble meaningful words or sentences, including all mathematical formulas and tables).
-    【Objective】: Create a JSON document that preserves all original text from the OCR-scanned paper, excluding any images, formulas, tables, or corrupted characters, while retaining paragraph segmentation and the hierarchical structure of sections and subsections. 
-    For **each section or subsection**:
-    1. **Text Cleaning**: Remove corrupted characters, non-ASCII symbols, artifacts from images, formulas, and tables, without altering valid textual content.
-    2. **Classification**: For **each section or subsection**, classify it into one of the following keys: 'heading', 'content', 'subsections'. Ensure the text from each element is preserved in the final JSON.
-    3. **Segmentation**: Detect and preserve paragraphs, sections, and subsections based on structural and formatting cues (e.g., blank lines, indentation).
-    4. **Hierarchy Identification**: Ensure the new section hierarchical structure is consistent with the previously generated hierarchy {previous_hierarchy}. 
-    5. **JSON Conversion**: Convert the cleaned and classified text into JSON format, set the key followed by these categories: 'heading', 'content', 'subsections'. For headings and contents, the value is a string. for subsections, the value is a list of dictionaries with the keys: 'heading', 'content', 'subsections'. subsections also have the same format.
-    **For sections**:
-    1. Clearly indicate whether it is a **heading** or **content** or **subsections**.
-    2. **Group all paragraphs** that belong to the same heading or subheading under that heading.
-    3. **Only considering text marked with # or ## as headings and subheadings when classifying elements in sections.**
-    【Final Notes】: Do not remove any valid text during processing. Ensure the final JSON file accurately reflects the organization and content of the original document, focusing solely on the textual data.
-    【Important】:
+    system_prompt = f"""【Task Description】: Convert OCR-scanned text from an academic paper's References section into a structured JSON file. The text may contain errors, formatting issues, and random encodings. Your task is to **remove any corrupted or unreadable text** (i.e., non-ASCII characters or sequences that do not resemble meaningful words or sentences, including mathematical formulas and tables).
+【Objective】: Create a JSON document that preserves all original text from the OCR-scanned paper, excluding any images, formulas, tables, or corrupted characters, while retaining paragraph segmentation and the hierarchical structure of sections and subsections. 
+**For each reference**:
+1. **Text Cleaning**: Remove corrupted characters, non-ASCII symbols, image artifacts, and any irrelevant content (formulas, tables, etc.) while preserving the complete reference text.
+2. **Paper Name Extraction**: Extract the **title** of the referenced paper and classify it under the `'paper_name'` field.
+3. **Content Preservation**: Place the remaining content of the reference (authors, publication year, journal name, etc.) under the `'content'` field.
+4. **JSON Conversion**: Convert the cleaned reference text into a JSON object with the keys:
+   - `'paper_name'`: The paper title.
+   - `'content'`: The full reference text.
+【Final Notes】:
+- Return valid JSON data for each reference entry.
+- Ensure that the JSON structure is properly formatted.
+【Important】:
     - Only return valid JSON data for **each individual element**. Do not include any additional explanations or comments in the response.
     - Ensure the JSON structure is valid and properly formatted. Ensure the new JSON structure follows the same logical order as the original text.
-    - **Do not generate or classify any text as 'title'. Only classify as 'heading', 'content', or 'subsections'.**
-    【Raw OCR-scanned text】: """
+**Raw OCR-scanned text**: """
 
     completion = client.chat.completions.create(
         model="qwen2.5-72b-instruct",
@@ -215,6 +220,7 @@ def process_single_chunk_final(chunk, client, previous_hierarchy):
 
     return chunk_json
 
+
 def update_paper_structure(
     chunk_result, paper_structure
 ):  ##这个按照下面metadata的报错来看，他也是错的，但是这个函数本身不影响模型的输出和最终结果
@@ -223,7 +229,7 @@ def update_paper_structure(
         return paper_structure  # 如果没有chunk_result，返回当前的paper_structure
 
     # 遍历 chunk_result 中的每个元素，解析并更新结构
-    document = chunk_result['document']
+    document = chunk_result["document"]
     for element in document:
         # 如果是 'title'，更新标题字段
         if element["type"] == "title":
