@@ -74,22 +74,29 @@ def process_md_chunks(md_text, client, max_token=3000):
     chunks = split_text_into_chunks_by_chapter(md_text)
     first_chunk, then_chunks, final_chunk = get_segmented_chunks(chunks)
     paper_metadata = {}
-    previous_hierarchy = {}
+    sections_metadata = []
+    previous_hierarchy = []
 
     """处理拆分后的 chunk，并确保每个 chunk 的字符数不超过 max_token，保持层次一致性"""
     # 处理 first_chunk
     if first_chunk:
-        chunk_result = process_single_chunk_first(first_chunk, client)
+        # chunk_result = process_single_chunk_first(first_chunk, client)
+        import pickle
+        chunk_result = pickle.load(open('chunk_result1.pkl','rb'))
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
-        paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
+        # chunk_result中的所有元素, 除了sections, 更新到paper_metadata中
+        paper_metadata = {key: value for key, value in chunk_result.items() if key != 'sections'}
+        # 将chunk_result中的sections更新到sections_metadata中
+        sections_metadata.extend(chunk_result['sections'])
         print("First chunk processed")
         print(f"Updated paper_metadata: {paper_metadata}")
 
     # 处理 then_chunks
     for chunk in then_chunks:
-        chunk_result = process_single_chunk_then(chunk, client, previous_hierarchy)
+        # chunk_result = process_single_chunk_then(chunk, client, previous_hierarchy)
+        chunk_result = pickle.load(open('chunk_result2.pkl','rb'))
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
-        paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
+        sections_metadata.extend(chunk_result['sections'])
         print("Then chunk processed")
         print(f"Updated paper_metadata: {paper_metadata}")
 
@@ -97,9 +104,16 @@ def process_md_chunks(md_text, client, max_token=3000):
     if final_chunk:
         chunk_result = process_single_chunk_final(final_chunk, client, previous_hierarchy)
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
-        paper_metadata = update_paper_metadata(chunk_result, paper_metadata)
+        # 如果chunk_result中有sections，则更新sections_metadata
+        if chunk_result['sections']:
+            sections_metadata.extend(chunk_result['sections'])
+        # 更新references到paper_metadata
+        paper_metadata['references'] = chunk_result['references']
         print("Final chunk processed")
         print(f"Final paper_metadata: {paper_metadata}")
+    
+    # 最后,添加sections_metadata到paper_metadata中
+    paper_metadata['sections'] = sections_metadata
 
     return paper_metadata, previous_hierarchy
 
@@ -222,47 +236,23 @@ def update_paper_structure(
     if not chunk_result:
         return paper_structure  # 如果没有chunk_result，返回当前的paper_structure
 
-    # 遍历 chunk_result 中的每个元素，解析并更新结构
-    document = chunk_result['document']
-    for element in document:
-        # 如果是 'title'，更新标题字段
-        if element["type"] == "title":
-            paper_structure["title"] = element["content"]
+    # 遍历 chunk_result 中的每个元素，只要key为sections，就更新paper_structure
+    for key, value in chunk_result.items():
+        if key == "sections":
+            paper_structure.extend(value)
+    
+    # 删除paper_structure中的content, 只保留heading和subsections
+    def remove_content(section):
+        if "content" in section:
+            del section["content"]
+        if "subsections" in section:
+            for subsection in section["subsections"]:
+                remove_content(subsection)
 
-        # 如果是 'authors'，更新作者列表
-        elif element["type"] == "authors":
-            paper_structure.setdefault("authors", []).append(element["content"])
-
-        # 如果是 'sections'，处理章节内容
-        elif element["type"] == "sections":
-            section_content = element["content"]  # 获取sections的内容
-            for sub_element in section_content:  # 遍历章节的具体内容
-                if sub_element["type"] == "heading":
-                    paper_structure.setdefault("sections", []).append(
-                        {
-                            "type": "heading",
-                            "content": sub_element["content"],
-                            "subsections": [],  # 初始化子部分
-                        }
-                    )
-
-                # 如果需要处理子标题，不包含段落
-                elif sub_element["type"] == "subheading":
-                    if len(paper_structure["sections"]) > 0:
-                        paper_structure["sections"][-1]["subsections"].append(
-                            {"type": "subheading", "content": sub_element["content"]}
-                        )
-
+    for section in paper_structure:
+        remove_content(section)
+    
     return paper_structure
-
-
-# need to do
-def update_paper_metadata(chunk_result, paper_metadata):
-    """更新生成的 paper metadata，将所有信息保留到 JSON"""
-    ##这个函数改了很多个版本，没有运行结果对的，所以我把它改成了一个空函数
-
-    return paper_metadata
-
 
 def save_json_to_file(paper_metadata, output_file):
     """将 JSON 数据保存到文件"""
