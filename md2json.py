@@ -201,8 +201,8 @@ def process_single_chunk_then(chunk, client, previous_hierarchy):
 # todo
 def process_single_chunk_final(chunk, client, previous_hierarchy):
     system_prompt = f"""【Task Description】: Convert OCR-scanned text from an academic paper's sections into a structured JSON file. The text may contain errors, formatting issues, and random encodings. Your task is to **remove any corrupted or unreadable text** (i.e., non-ASCII characters or sequences that do not resemble meaningful words or sentences, including mathematical formulas and tables).
-【Objective】: Create a JSON document that preserves all original text from the OCR-scanned paper, excluding any images, formulas, tables, or corrupted characters, while retaining paragraph segmentation and the hierarchical structure of sections and subsections. 
-For **each section or subsection**:
+    【Objective】: Create a JSON document that preserves all original text from the OCR-scanned paper, excluding any images, formulas, tables, or corrupted characters, while retaining paragraph segmentation and the hierarchical structure of sections and subsections. 
+    For **each section or subsection**:
     1. **Text Cleaning**: Remove corrupted characters, non-ASCII symbols, artifacts from images, formulas, and tables, without altering valid textual content.
     2. **Classification**: For **each section or subsection**, classify it into one of the following keys: 'heading', 'content', 'subsections'. Ensure the text from each element is preserved in the final JSON.
     3. **Segmentation**: Detect and preserve paragraphs, sections, and subsections based on structural and formatting cues (e.g., blank lines, indentation).
@@ -212,14 +212,14 @@ For **each section or subsection**:
     1. Clearly indicate whether it is a **heading** or **content** or **subsections**.
     2. **Group all paragraphs** that belong to the same heading or subheading under that heading.
     3. **Only considering text marked with # or ## as headings and subheadings when classifying elements in sections.**
-**For each reference**:
-1. **Text Cleaning**: Remove corrupted characters, non-ASCII symbols, image artifacts, and any irrelevant content (formulas, tables, etc.) while preserving the complete reference text.
-2. **Paper Name Extraction**: Extract the **title** of the referenced paper and classify it under the `'paper_name'` field.
-3. **Content Preservation**: Place the remaining content of the reference (authors, publication year, journal name, etc.) under the `'content'` field.
-4. **JSON Conversion**: Convert the cleaned reference text into a JSON object with the keys:
-   - `'paper_name'`: The paper title.
-   - `'content'`: The full reference text.
-【Final Notes】:
+    **For each reference**:
+    1. **Text Cleaning**: Remove corrupted characters, non-ASCII symbols, image artifacts, and any irrelevant content (formulas, tables, etc.) while preserving the complete reference text.
+    2. **Paper Name Extraction**: Extract the **title** of the referenced paper and classify it under the `'paper_name'` field.
+    3. **Content Preservation**: Place the remaining content of the reference (authors, publication year, journal name, etc.) under the `'content'` field.
+    4. **JSON Conversion**: Convert the cleaned reference text into a JSON object with the keys:
+        - `'paper_name'`: The paper title.
+        - `'content'`: The full reference text.
+    【Final Notes】:
 - Return valid JSON data for each reference entry.
 - Ensure that the JSON structure is properly formatted.
 【Important】:
