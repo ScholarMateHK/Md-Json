@@ -84,40 +84,47 @@ def process_md_chunks(md_text, client, max_token=3000):
     if first_chunk:
         # chunk_result = process_single_chunk_first(first_chunk, client)
         import pickle
-        chunk_result = pickle.load(open('chunk_result1.pkl','rb'))
+
+        chunk_result = pickle.load(
+            open("/Users/yibocao/Repository/Md-Json/chunk_result1.pkl", "rb")
+        )
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
         # chunk_result中的所有元素, 除了sections, 更新到paper_metadata中
-        paper_metadata = {key: value for key, value in chunk_result.items() if key != 'sections'}
+        paper_metadata = {
+            key: value for key, value in chunk_result.items() if key != "sections"
+        }
         # 将chunk_result中的sections更新到sections_metadata中
-        sections_metadata.extend(chunk_result['sections'])
+        sections_metadata.extend(chunk_result["sections"])
         print("First chunk processed")
         print(f"Updated paper_metadata: {paper_metadata}")
 
     # 处理 then_chunks
     for chunk in then_chunks:
         # chunk_result = process_single_chunk_then(chunk, client, previous_hierarchy)
-        chunk_result = pickle.load(open('chunk_result2.pkl','rb'))
+        chunk_result = pickle.load(
+            open("/Users/yibocao/Repository/Md-Json/chunk_result2.pkl", "rb")
+        )
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
-        sections_metadata.extend(chunk_result['sections'])
+        sections_metadata.extend(chunk_result["sections"])
         print("Then chunk processed")
         print(f"Updated paper_metadata: {paper_metadata}")
 
     # 处理 final_chunk
     if final_chunk:
-        chunk_result = process_single_chunk_final(
-            final_chunk, client, previous_hierarchy
+        # chunk_result = process_single_chunk_final(final_chunk, client, previous_hierarchy)
+        chunk_result = pickle.load(
+            open("/Users/yibocao/Repository/Md-Json/chunk_result3.pkl", "rb")
         )
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
-        # 如果chunk_result中有sections，则更新sections_metadata
-        if chunk_result['sections']:
-            sections_metadata.extend(chunk_result['sections'])
-        # 更新references到paper_metadata
-        paper_metadata['references'] = chunk_result['references']
+        # chunk_result中的所有元素, 除了sections, 更新到paper_metadata中
+        paper_metadata = {
+            key: value for key, value in chunk_result.items() if key != "sections"
+        }
         print("Final chunk processed")
         print(f"Final paper_metadata: {paper_metadata}")
-    
+
     # 最后,添加sections_metadata到paper_metadata中
-    paper_metadata['sections'] = sections_metadata
+    paper_metadata["sections"] = sections_metadata
 
     return paper_metadata, previous_hierarchy
 
@@ -256,7 +263,7 @@ def update_paper_structure(
     for key, value in chunk_result.items():
         if key == "sections":
             paper_structure.extend(value)
-    
+
     # 删除paper_structure中的content, 只保留heading和subsections
     def remove_content(section):
         if "content" in section:
@@ -267,8 +274,9 @@ def update_paper_structure(
 
     for section in paper_structure:
         remove_content(section)
-    
+
     return paper_structure
+
 
 def save_json_to_file(paper_metadata, output_file):
     """将 JSON 数据保存到文件"""
@@ -277,7 +285,7 @@ def save_json_to_file(paper_metadata, output_file):
 
 
 if __name__ == "__main__":
-    file_path = "227364298.md"
+    file_path = "/Users/yibocao/Repository/Md-Json/227364298.md"
     output_file = "227364298.json"
     md_text = read_md_file(file_path)
 
