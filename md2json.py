@@ -77,14 +77,14 @@ def process_md_chunks(md_text, client, max_token=3000):
     first_chunk, then_chunks, final_chunk = get_segmented_chunks(chunks)
     paper_metadata = {}
     sections_metadata = []
-    previous_hierarchy = []
+    previous_hierarchy = {'sections': []}
 
     """处理拆分后的 chunk，并确保每个 chunk 的字符数不超过 max_token，保持层次一致性"""
     # 处理 first_chunk
     if first_chunk:
-        # chunk_result = process_single_chunk_first(first_chunk, client)
+        chunk_result = process_single_chunk_first(first_chunk, client)
         import pickle
-        chunk_result = pickle.load(open('chunk_result1.pkl','rb'))
+        # chunk_result = pickle.load(open('chunk_result1.pkl','rb'))
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
         # chunk_result中的所有元素, 除了sections, 更新到paper_metadata中
         paper_metadata = {key: value for key, value in chunk_result.items() if key != 'sections'}
@@ -95,8 +95,7 @@ def process_md_chunks(md_text, client, max_token=3000):
 
     # 处理 then_chunks
     for chunk in then_chunks:
-        # chunk_result = process_single_chunk_then(chunk, client, previous_hierarchy)
-        chunk_result = pickle.load(open('chunk_result2.pkl','rb'))
+        chunk_result = process_single_chunk_then(chunk, client, previous_hierarchy)
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
         sections_metadata.extend(chunk_result['sections'])
         print("Then chunk processed")
@@ -109,7 +108,7 @@ def process_md_chunks(md_text, client, max_token=3000):
         )
         previous_hierarchy = update_paper_structure(chunk_result, previous_hierarchy)
         # 如果chunk_result中有sections，则更新sections_metadata
-        if chunk_result['sections']:
+        if 'sections' in chunk_result:
             sections_metadata.extend(chunk_result['sections'])
         # 更新references到paper_metadata
         paper_metadata['references'] = chunk_result['references']
@@ -255,7 +254,7 @@ def update_paper_structure(
     # 遍历 chunk_result 中的每个元素，只要key为sections，就更新paper_structure
     for key, value in chunk_result.items():
         if key == "sections":
-            paper_structure.extend(value)
+            paper_structure['sections'].extend(value)
     
     # 删除paper_structure中的content, 只保留heading和subsections
     def remove_content(section):
@@ -265,7 +264,7 @@ def update_paper_structure(
             for subsection in section["subsections"]:
                 remove_content(subsection)
 
-    for section in paper_structure:
+    for section in paper_structure['sections']:
         remove_content(section)
     
     return paper_structure
