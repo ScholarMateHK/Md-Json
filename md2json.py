@@ -117,7 +117,10 @@ class MDToJSONConverter:
                 if 'sections' in chunk_result:
                     sections_metadata.extend(chunk_result['sections'])
                 previous_hierarchy = self.update_paper_structure(chunk_result, previous_hierarchy)
-                paper_metadata['references'] = chunk_result['references']
+                if 'references' in chunk_result:
+                    if 'references' not in paper_metadata:
+                        paper_metadata['references'] = []
+                    paper_metadata['references'].extend(chunk_result['references'])
                 print("Final chunk processed")
                 print(f"Final paper_metadata: {paper_metadata}")
         
@@ -220,9 +223,20 @@ class MDToJSONConverter:
         1. **Keep Right Hierarchy**: The reference should be placed under the `'references'` field, even if the chunk does not contain any sections.
         2. **Paper Name Extraction**: Extract the **title** of the referenced paper and classify it under the `'paper_name'` field.
         3. **Content Preservation**: Place the remaining content of the reference (authors, publication year, journal name, etc.) under the `'content'` field.
-        4. **JSON Conversion**: Convert the cleaned reference text into a JSON object with the keys:
-            - `'paper_name'`: The paper title.
-            - `'content'`: The full reference text.
+        4. **JSON Conversion**: Convert the cleaned references text into a JSON object as the following format:"""+"""
+        {
+           "references": [
+                {
+                    "paper_name": "The title of the referenced paper",
+                    "content": "The remaining content of the reference"
+                },
+                ...
+                {
+                    "paper_name": "The title of the referenced paper",
+                    "content": "The remaining content of the reference"
+                }
+            ]
+        }
         【Final Notes】:
         - Return valid JSON data for each reference entry.
         - Ensure that the JSON structure is properly formatted.
