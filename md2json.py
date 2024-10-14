@@ -253,11 +253,12 @@ class MDToJSONConverter:
         
         # 删除paper_structure中的content, 只保留heading和subsections
         def remove_content(section):
-            if "content" in section:
+            if "content" in section and section["content"] is not None:
                 del section["content"]
-            if "subsections" in section:
+            if "subsections" in section and section["subsections"] is not None:
                 for subsection in section["subsections"]:
-                    remove_content(subsection)
+                    if subsection is not None:
+                        remove_content(subsection)
 
         for section in paper_structure['sections']:
             remove_content(section)
