@@ -2,6 +2,7 @@ import time
 import os
 import re
 import json
+import json5
 import copy
 from openai import OpenAI
 
@@ -167,7 +168,7 @@ class MDToJSONConverter:
         output = self.call_openai_api(chunk, system_prompt)
         output_cleaned = self.remove_special_characters(output)
         print(f"Chunk 返回的内容: {output_cleaned}\n")
-        chunk_json = json.loads(output_cleaned)
+        chunk_json = json5.loads(output_cleaned)
 
         return chunk_json
 
@@ -196,7 +197,7 @@ class MDToJSONConverter:
         output = self.call_openai_api(chunk, system_prompt)
         output_cleaned = self.remove_special_characters(output)
         print(f"Chunk 返回的内容: {output_cleaned}\n")
-        chunk_json = json.loads(output_cleaned)
+        chunk_json = json5.loads(output_cleaned)
 
         return chunk_json
 
@@ -234,7 +235,7 @@ class MDToJSONConverter:
         output = self.call_openai_api(chunk, system_prompt)
         output_cleaned = self.remove_special_characters(output)
         print(f"Chunk 返回的内容: {output_cleaned}\n")
-        chunk_json = json.loads(output_cleaned)
+        chunk_json = json5.loads(output_cleaned)
 
         return chunk_json
 
