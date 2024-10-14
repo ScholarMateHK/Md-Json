@@ -9,7 +9,8 @@ class MDToJSONConverter:
     def __init__(self, api_key, base_url, model):
         self.client = OpenAI(
             api_key=api_key,
-            base_url=base_url
+            base_url=base_url,
+            timeout=300
         )
         self.model = model
         self.completion_tokens = 0
@@ -65,6 +66,8 @@ class MDToJSONConverter:
             final_chunk = chunks.pop() + chunks.pop()
         elif len(chunks) == 1:
             final_chunk = chunks.pop()
+        # final_chunk 可能很长，所以需要每3000字符分段处理
+        final_chunks = [final_chunk[i:i+3000] for i in range(0, self.count_token_len(final_chunk), 3000)]
 
         # 处理then_chunks
         current_chunk = ""
@@ -78,11 +81,11 @@ class MDToJSONConverter:
         if current_chunk:
             then_chunks.append(current_chunk)
 
-        return first_chunk, then_chunks, final_chunk
+        return first_chunk, then_chunks, final_chunks
 
     def process_md_chunks(self, md_text, max_token=3000):
         chunks = self.split_text_into_chunks_by_chapter(md_text)
-        first_chunk, then_chunks, final_chunk = self.get_segmented_chunks(chunks)
+        first_chunk, then_chunks, final_chunks = self.get_segmented_chunks(chunks)
         paper_metadata = {}
         sections_metadata = []
         previous_hierarchy = {'sections': []}
@@ -106,15 +109,16 @@ class MDToJSONConverter:
             print("Then chunk processed")
             print(f"Updated paper_metadata: {paper_metadata}")
 
-        # 处理 final_chunk
-        if final_chunk:
-            chunk_result = self.process_single_chunk_final(final_chunk, previous_hierarchy)
-            if 'sections' in chunk_result:
-                sections_metadata.extend(chunk_result['sections'])
-            previous_hierarchy = self.update_paper_structure(chunk_result, previous_hierarchy)
-            paper_metadata['references'] = chunk_result['references']
-            print("Final chunk processed")
-            print(f"Final paper_metadata: {paper_metadata}")
+        # 处理 final_chunks
+        if final_chunks:
+            for chunk in final_chunks:
+                chunk_result = self.process_single_chunk_final(chunk, previous_hierarchy)
+                if 'sections' in chunk_result:
+                    sections_metadata.extend(chunk_result['sections'])
+                previous_hierarchy = self.update_paper_structure(chunk_result, previous_hierarchy)
+                paper_metadata['references'] = chunk_result['references']
+                print("Final chunk processed")
+                print(f"Final paper_metadata: {paper_metadata}")
         
         # 将sections_metadata添加到paper_metadata中
         paper_metadata_items = list(paper_metadata.items())
@@ -289,7 +293,7 @@ if __name__ == "__main__":
     selected_llm = "qwen2.5-72b-instruct"
     converter = MDToJSONConverter(llm_dict[selected_llm]["key"], llm_dict[selected_llm]["base_url"], selected_llm)
     
-    file_name = "227364298.md"
+    file_name = "1-s2.0-S0040162523008284-main.md"
     start_time = time.time()
     converter.convert(file_name, file_name.replace(".md", ".json"))
     end_time = time.time()
