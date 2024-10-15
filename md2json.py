@@ -132,19 +132,31 @@ class MDToJSONConverter:
         return paper_metadata, previous_hierarchy
 
     def call_openai_api(self, chunk, system_prompt):
-        completion = self.client.chat.completions.create(
-            model=self.model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": chunk},
-            ],
-        )
+        max_retries = 3
+        retry_count = 0
+        while retry_count < max_retries:
+            try:
+                completion = self.client.chat.completions.create(
+                    model=self.model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": chunk},
+                    ],
+                    temperature=0.0,
+                    timeout=300  # 设置300秒超时
+                )
 
-        completion_dict = completion.to_dict()
-        output = completion_dict["choices"][0]["message"]["content"]
-        self.prompt_tokens += completion_dict["usage"]["prompt_tokens"]
-        self.completion_tokens += completion_dict["usage"]["completion_tokens"]
-        return output
+                completion_dict = completion.to_dict()
+                output = completion_dict["choices"][0]["message"]["content"]
+                self.prompt_tokens += completion_dict["usage"]["prompt_tokens"]
+                self.completion_tokens += completion_dict["usage"]["completion_tokens"]
+                return output
+            except Exception as e:
+                retry_count += 1
+                if retry_count == max_retries:
+                    raise Exception(f"OpenAI API 调用失败，已重试 {max_retries} 次：{str(e)}")
+                print(f"OpenAI API 调用失败，正在进行第 {retry_count} 次重试...")
+                time.sleep(2)  # 等待2秒后重试
 
 
     def process_single_chunk_first(self, chunk):
